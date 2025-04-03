@@ -153,7 +153,7 @@ function App() {
     <div className="min-h-screen gradient-background text-white">
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <img src="/logo.png" alt="Logo PITICKETS" className="h-8 sm:h-12 hover-glow" />
+        <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.0</span>
         </div>
       </header>
