@@ -32,6 +32,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [validationSuccess, setValidationSuccess] = useState(false);
+  const [qrScanner, setQrScanner] = useState<Html5Qrcode | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -117,17 +118,17 @@ function App() {
 
   const startQrScanner = () => {
     setShowQrReader(true);
-    const html5QrCode = new Html5Qrcode("qr-reader");
-    html5QrCode.start(
+    const scanner = new Html5Qrcode("qr-reader");
+    setQrScanner(scanner);
+    scanner.start(
       { facingMode: "environment" },
       {
         fps: 10,
-        qrbox: 250
+        qrbox: { width: 250, height: 250 }
       },
       (decodedText) => {
         setTicketCode(decodedText);
-        setShowQrReader(false);
-        html5QrCode.stop();
+        stopQrScanner();
       },
       (error) => {
         console.error(error);
@@ -137,28 +138,39 @@ function App() {
     });
   };
 
+  const stopQrScanner = () => {
+    if (qrScanner) {
+      qrScanner.stop().then(() => {
+        setShowQrReader(false);
+        setQrScanner(null);
+      }).catch(err => {
+        console.error("Error stopping scanner:", err);
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen gradient-background text-white">
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <img src="/logo.png" alt="Logo PITICKETS" className="h-12 hover-glow" />
+          <img src="/logo.png" alt="Logo PITICKETS" className="h-8 sm:h-12 hover-glow" />
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.0</span>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-6 space-y-8">
-        <div className="glass-effect rounded-xl p-8 shadow-xl animate-fade-in hover-glow">
+      <main className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        <div className="glass-effect rounded-xl p-4 sm:p-8 shadow-xl animate-fade-in hover-glow">
           <div className="flex items-center gap-3 mb-6 bg-yellow-500/10 p-4 rounded-lg">
-            <AlertCircle className="text-yellow-400 animate-pulse-glow" />
-            <p className="font-medium">Antes de usar essa ferramenta, por favor, leia as informações no final da página.</p>
+            <AlertCircle className="text-yellow-400 animate-pulse-glow flex-shrink-0" />
+            <p className="font-medium text-sm sm:text-base">Antes de usar essa ferramenta, por favor, leia as informações no final da página.</p>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="relative">
               <label className="block text-sm font-medium mb-2">Selecione um evento:</label>
               <div className="relative">
                 <select 
-                  className="w-full bg-white/5 border border-white/20 rounded-lg p-4 pr-10 focus:ring-2 focus:ring-blue-500 transition appearance-none hover-glow"
+                  className="w-full bg-white/5 border border-white/20 rounded-lg p-3 sm:p-4 pr-10 focus:ring-2 focus:ring-blue-500 transition appearance-none hover-glow"
                   value={selectedEvent}
                   onChange={(e) => setSelectedEvent(e.target.value)}
                   disabled={isLoading}
@@ -177,7 +189,7 @@ function App() {
               <div className="relative">
                 <input
                   type="text"
-                  className="w-full bg-white/5 border border-white/20 rounded-lg p-4 pl-12 focus:ring-2 focus:ring-blue-500 transition hover-glow"
+                  className="w-full bg-white/5 border border-white/20 rounded-lg p-3 sm:p-4 pl-12 focus:ring-2 focus:ring-blue-500 transition hover-glow"
                   placeholder="Digite o código do ingresso"
                   value={ticketCode}
                   onChange={(e) => setTicketCode(e.target.value)}
@@ -188,7 +200,7 @@ function App() {
 
             <div className="flex gap-4">
               <button
-                className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-lg p-4 font-medium flex items-center justify-center gap-2 transition hover-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-lg p-3 sm:p-4 font-medium flex items-center justify-center gap-2 transition hover-glow disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                 onClick={validateTicket}
                 disabled={isValidating}
               >
@@ -201,7 +213,7 @@ function App() {
               </button>
               
               <button
-                className="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg p-4 font-medium flex items-center justify-center gap-2 transition hover-glow"
+                className="flex-1 bg-purple-600 hover:bg-purple-700 rounded-lg p-3 sm:p-4 font-medium flex items-center justify-center gap-2 transition hover-glow text-sm sm:text-base"
                 onClick={startQrScanner}
               >
                 <QrCode size={20} />
@@ -211,38 +223,46 @@ function App() {
 
             {validationMessage && (
               <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 animate-shake">
-                <p className="text-red-300">{validationMessage}</p>
+                <p className="text-red-300 text-sm sm:text-base">{validationMessage}</p>
               </div>
             )}
 
             {showQrReader && (
-              <div id="qr-reader" className="mt-4 bg-black rounded-lg overflow-hidden animate-scale" />
+              <div className="relative">
+                <div id="qr-reader" className="mt-4 bg-black rounded-lg overflow-hidden animate-scale max-w-sm mx-auto" />
+                <button
+                  onClick={stopQrScanner}
+                  className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 rounded-full p-2 transition hover-glow"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
             )}
           </div>
         </div>
 
-        <section className="glass-effect rounded-xl p-8 shadow-xl animate-slide-up hover-glow">
-          <h2 className="text-xl font-bold mb-4">Informações Importantes</h2>
-          <div className="space-y-4 text-gray-300">
+        <section className="glass-effect rounded-xl p-4 sm:p-8 shadow-xl animate-slide-up hover-glow">
+          <h2 className="text-lg sm:text-xl font-bold mb-4">Informações Importantes</h2>
+          <div className="space-y-4 text-gray-300 text-sm sm:text-base">
             <p className="bg-white/5 p-4 rounded-lg"><strong>Essa é uma área restrita e desenvolvida apenas para os organizadores e produtores de eventos.</strong></p>
             <p className="bg-white/5 p-4 rounded-lg"><strong>Não nos responsabilizamos pelo uso indevido e incorreto da ferramenta.</strong></p>
             <p className="bg-white/5 p-4 rounded-lg"><strong>Selecione e se atente ao evento selecionado para a validação do Ingressos. Cada Evento tem o armazenamento próprio dos ingressos vendidos.</strong></p>
           </div>
         </section>
 
-        <section className="glass-effect rounded-xl p-8 shadow-xl animate-slide-up hover-glow bg-green-600/10">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <section className="glass-effect rounded-xl p-4 sm:p-8 shadow-xl animate-slide-up hover-glow bg-green-600/10">
+          <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2">
             <AlertCircle className="text-green-400" />
             Aconteceu algum erro? Precisa de ajuda?
           </h2>
-          <p className="mb-6 text-gray-300">Entre em contato direto comigo, respondo rápido.</p>
+          <p className="mb-6 text-gray-300 text-sm sm:text-base">Entre em contato direto comigo, respondo rápido.</p>
           <a
             href="https://wa.me/5589994582600?text=Equipe%20de%20validação%20de%20Ingressos%20aqui,%20preciso%20de%20suporte%20urgente."
-            className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 rounded-lg px-8 py-4 font-medium transition hover-glow"
+            className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 rounded-lg px-6 sm:px-8 py-3 sm:py-4 font-medium transition hover-glow text-sm sm:text-base"
             target="_blank"
             rel="noopener noreferrer"
           >
-            <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" className="w-6 h-6" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" className="w-5 h-5 sm:w-6 sm:h-6" />
             Falar no WhatsApp
           </a>
         </section>
@@ -250,9 +270,9 @@ function App() {
 
       {isModalOpen && ticketInfo && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-gradient-to-b from-gray-900 to-gray-800 rounded-xl p-8 max-w-md w-full animate-scale text-white">
+          <div className="bg-gradient-to-b from-gray-900 to-gray-800 rounded-xl p-4 sm:p-8 max-w-md w-full animate-scale text-white">
             <div className="flex justify-between items-start mb-6">
-              <h3 className="text-2xl font-bold">Informações do Ingresso</h3>
+              <h3 className="text-xl sm:text-2xl font-bold">Informações do Ingresso</h3>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-white transition hover-glow"
@@ -277,21 +297,21 @@ function App() {
               <div className="space-y-4">
                 <div className="bg-white/5 p-4 rounded-lg border border-white/10">
                   <p className="text-gray-400 text-sm">Evento</p>
-                  <p className="text-lg font-medium">{ticketInfo.eventName}</p>
+                  <p className="text-base sm:text-lg font-medium">{ticketInfo.eventName}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-lg border border-white/10">
                   <p className="text-gray-400 text-sm">Nome do Comprador</p>
-                  <p className="text-lg font-medium">{ticketInfo.fullName}</p>
+                  <p className="text-base sm:text-lg font-medium">{ticketInfo.fullName}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-lg border border-white/10">
                   <p className="text-gray-400 text-sm">CPF do Comprador</p>
-                  <p className="text-lg font-medium">{ticketInfo.cpf}</p>
+                  <p className="text-base sm:text-lg font-medium">{ticketInfo.cpf}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-lg border border-white/10">
                   <p className="text-gray-400 text-sm">Tipo</p>
-                  <p className="text-lg font-medium">{ticketInfo.type || 'Não especificado'}</p>
+                  <p className="text-base sm:text-lg font-medium">{ticketInfo.type || 'Não especificado'}</p>
                 </div>
-                <div className={`p-4 rounded-lg font-bold text-center ${
+                <div className={`p-4 rounded-lg font-bold text-center text-sm sm:text-base ${
                   ticketInfo.isValidated 
                     ? validationSuccess
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -308,7 +328,7 @@ function App() {
 
               {!ticketInfo.isValidated && (
                 <button
-                  className="w-full bg-green-500 hover:bg-green-600 text-white rounded-lg p-4 font-medium transition hover-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-green-500 hover:bg-green-600 text-white rounded-lg p-3 sm:p-4 font-medium transition hover-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                   onClick={handleFinalValidation}
                   disabled={isValidating}
                 >
