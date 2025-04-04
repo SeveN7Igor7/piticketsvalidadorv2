@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { QrCode, Ticket, AlertCircle, CheckCircle2, XCircle, ChevronDown, Loader2 } from 'lucide-react';
+import { QrCode, Ticket, AlertCircle, CheckCircle2, XCircle, ChevronDown, Loader2, Archive, CheckSquare, Tag } from 'lucide-react';
 import firebase from 'firebase/app';
 import 'firebase/database';
 import { Html5Qrcode } from 'html5-qrcode';
 
-// Initialize Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyB2JMVHvH8FKs_GEl8JVRoRfPDjY9Ztcf8",
   authDomain: "piauiticketsdb.firebaseapp.com",
@@ -21,6 +20,11 @@ if (!firebase.apps.length) {
 
 const db = firebase.database();
 
+interface ValidatedTypeCount {
+  type: string;
+  count: number;
+}
+
 function App() {
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState('');
@@ -34,18 +38,75 @@ function App() {
   const [validationSuccess, setValidationSuccess] = useState(false);
   const [qrScanner, setQrScanner] = useState<Html5Qrcode | null>(null);
 
+  // Ticket tracking state
+  const [storedTickets, setStoredTickets] = useState(0);
+  const [validatedTickets, setValidatedTickets] = useState(0);
+  const [validatedTypesCounts, setValidatedTypesCounts] = useState<ValidatedTypeCount[]>([]);
+  const [companyId, setCompanyId] = useState('');
+
   useEffect(() => {
     setIsLoading(true);
     db.ref('/eventos').once('value').then(snapshot => {
       const eventos = snapshot.val();
       const eventsList = [];
       for (const id in eventos) {
-        eventsList.push({ id, name: eventos[id].nomeevento });
+        eventsList.push({ 
+          id, 
+          name: eventos[id].nomeevento,
+          companyId: eventos[id].empresavinculada 
+        });
       }
       setEvents(eventsList);
       setIsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (!selectedEvent) {
+      setStoredTickets(0);
+      setValidatedTickets(0);
+      setValidatedTypesCounts([]);
+      setCompanyId('');
+      return;
+    }
+
+    const event = events.find(e => e.id === selectedEvent);
+    if (event?.companyId) {
+      setCompanyId(event.companyId);
+      
+      // Listen for stored tickets
+      const storedRef = db.ref(`empresas/${event.companyId}/vendas/vendasrealizadas/${selectedEvent}`);
+      storedRef.on('value', (snapshot) => {
+        const tickets = snapshot.val();
+        const count = tickets ? Object.keys(tickets).length : 0;
+        setStoredTickets(count);
+      });
+
+      // Listen for validated tickets with type breakdown
+      const validatedRef = db.ref(`/ingressos/${selectedEvent}/validados`);
+      validatedRef.on('value', (snapshot) => {
+        const validatedTypes = snapshot.val();
+        let totalValidated = 0;
+        const typesCounts: ValidatedTypeCount[] = [];
+
+        if (validatedTypes) {
+          Object.entries(validatedTypes).forEach(([type, tickets]: [string, any]) => {
+            const count = Object.keys(tickets).length;
+            totalValidated += count;
+            typesCounts.push({ type, count });
+          });
+        }
+
+        setValidatedTickets(totalValidated);
+        setValidatedTypesCounts(typesCounts);
+      });
+
+      return () => {
+        storedRef.off();
+        validatedRef.off();
+      };
+    }
+  }, [selectedEvent, events]);
 
   const validateTicket = async () => {
     if (!selectedEvent || !ticketCode) {
@@ -153,12 +214,51 @@ function App() {
     <div className="min-h-screen gradient-background text-white">
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-        <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
+          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.0</span>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        {selectedEvent && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="glass-effect rounded-xl p-6 shadow-xl hover-glow">
+                <div className="flex items-center gap-3 mb-4">
+                  <Archive className="text-blue-400" size={24} />
+                  <h3 className="text-lg font-semibold">Ingressos Armazenados</h3>
+                </div>
+                <p className="text-3xl font-bold text-blue-400">{storedTickets}</p>
+              </div>
+              
+              <div className="glass-effect rounded-xl p-6 shadow-xl hover-glow">
+                <div className="flex items-center gap-3 mb-4">
+                  <CheckSquare className="text-green-400" size={24} />
+                  <h3 className="text-lg font-semibold">Total de Ingressos Validados</h3>
+                </div>
+                <p className="text-3xl font-bold text-green-400">{validatedTickets}</p>
+              </div>
+            </div>
+
+            {validatedTypesCounts.length > 0 && (
+              <div className="glass-effect rounded-xl p-6 shadow-xl hover-glow">
+                <div className="flex items-center gap-3 mb-4">
+                  <Tag className="text-purple-400" size={24} />
+                  <h3 className="text-lg font-semibold">Validações por Tipo</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {validatedTypesCounts.map((type) => (
+                    <div key={type.type} className="bg-white/5 p-4 rounded-lg border border-white/10">
+                      <p className="text-gray-400 text-sm">Lote {type.type}</p>
+                      <p className="text-xl font-bold text-purple-400">{type.count} validados</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="glass-effect rounded-xl p-4 sm:p-8 shadow-xl animate-fade-in hover-glow">
           <div className="flex items-center gap-3 mb-6 bg-yellow-500/10 p-4 rounded-lg">
             <AlertCircle className="text-yellow-400 animate-pulse-glow flex-shrink-0" />
