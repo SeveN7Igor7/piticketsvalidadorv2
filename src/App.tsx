@@ -191,11 +191,14 @@ function App() {
       }
     } catch (error) {
       console.error('Error validating ticket:', error);
-('Ingresso não encontrado, confira os dados novamente com o cliente.');
-      }
-    } catch (error) {
-      console.error('10. Erro ao validar ingresso:', error);
-og('Starting final validation');
+      setValidationMessage('Erro ao validar o ingresso. Tente novamente.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleFinalValidation = async () => {
+    console.log('Starting final validation');
     console.log('Ticket info:', ticketInfo);
 
     if (!ticketInfo) {
@@ -312,7 +315,7 @@ og('Starting final validation');
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
-          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.2</span>
+          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Debug v1.3.2</span>
         </div>
       </header>
 
