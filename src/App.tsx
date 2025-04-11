@@ -129,7 +129,6 @@ function App() {
     }
   }, [selectedEvent, events]);
 
-  // Effect to handle QR code validation after scanning
   useEffect(() => {
     if (scannedCode) {
       console.log('Scanned code changed, preparing validation:', scannedCode);
@@ -149,33 +148,57 @@ function App() {
 
     const finalCode = codeToValidate || ticketCode;
 
-    if (!selectedEvent) {
-      console.log('Validation failed: No event selected');
-      setValidationMessage('Por favor, selecione um evento antes de validar o ingresso.');
+    if (!selectedEvent || !finalCode) {
+      console.log('Validation failed: No event selected or no ticket code');
+      setValidationMessage('Selecione um evento e insira o código do ingresso.');
       return;
     }
 
-    if (!finalCode) {
-      console.log('Validation failed: No ticket code');
-      setValidationMessage('Por favor, insira o código do ingresso.');
-      return;
-    }
-
-    console.log('Validation prerequisites met, proceeding with validation');
     setIsValidating(true);
     try {
-      console.log(`Checking ticket at path: /ingressos/${selectedEvent}/disponiveis/${finalCode}`);
+      // First, try to find the ticket in the disponiveis path
       const snapshot = await db.ref(`/ingressos/${selectedEvent}/disponiveis/${finalCode}`).once('value');
-      const ticket = snapshot.val();
-      console.log("Ticket data found:", ticket);
+      let ticket = snapshot.val();
+      console.log("1. Ticket inicial encontrado:", ticket);
+
+      // If ticket exists but has no type, or if ticket doesn't exist, try to find it using CPF
+      if (!ticket?.tipo || !ticket) {
+        console.log("2. Tipo não encontrado no ticket inicial, buscando por CPF");
+        // Get the CPF from the ticket data if it exists
+        const cpf = ticket?.compradorcpf;
+        console.log("3. CPF encontrado:", cpf);
+        
+        if (cpf) {
+          // Try to find the ticket type in the user's ingressoscomprados
+          console.log("4. Buscando em /users/cpf/${cpf}/ingressoscomprados/${finalCode}");
+          const userTicketSnapshot = await db.ref(`/users/cpf/${cpf}/ingressoscomprados/${finalCode}`).once('value');
+          const userTicket = userTicketSnapshot.val();
+          console.log("5. Dados do ingresso encontrados no usuário:", userTicket);
+          
+          if (userTicket?.tipo) {
+            console.log("6. Tipo encontrado no userTicket:", userTicket.tipo);
+            // Update the ticket object with the type from user path
+            ticket = {
+              ...ticket,
+              tipo: userTicket.tipo
+            };
+            console.log("7. Ticket atualizado com o tipo:", ticket);
+          }
+        }
+      }
 
       if (ticket) {
-        console.log('Setting ticket info');
-        const eventName = events.find(e => e.id === selectedEvent)?.name;
-        console.log('Event name:', eventName);
-        
+        console.log("8. Ticket final a ser mostrado:", {
+          eventName: events.find(e => e.id === selectedEvent)?.name,
+          fullName: ticket.fullname || 'N/A',
+          cpf: ticket.compradorcpf || 'N/A',
+          type: ticket.tipo,
+          isValidated: ticket.isvalidaded,
+          rawTicket: ticket
+        });
+
         setTicketInfo({
-          eventName: eventName,
+          eventName: events.find(e => e.id === selectedEvent)?.name,
           fullName: ticket.fullname || 'N/A',
           cpf: ticket.compradorcpf || 'N/A',
           type: ticket.tipo,
@@ -186,11 +209,11 @@ function App() {
         setValidationMessage('');
         setValidationSuccess(false);
       } else {
-        console.log('No ticket found');
+        console.log("9. Nenhum ticket encontrado");
         setValidationMessage('Ingresso não encontrado, confira os dados novamente com o cliente.');
       }
     } catch (error) {
-      console.error('Error validating ticket:', error);
+      console.error('10. Erro ao validar ingresso:', error);
       setValidationMessage('Erro ao validar o ingresso. Tente novamente.');
     } finally {
       setIsValidating(false);
@@ -303,10 +326,7 @@ function App() {
       } catch (err) {
         console.error("Error stopping scanner:", err);
         setValidationMessage('Erro ao parar o scanner. Por favor, recarregue a página.');
-        throw err;
       }
-    } else {
-      console.log('No scanner instance to stop');
     }
   };
 
@@ -315,7 +335,7 @@ function App() {
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
-          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Debug v1.3.2</span>
+          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Debug v1.3.4</span>
         </div>
       </header>
 
