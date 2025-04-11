@@ -37,6 +37,7 @@ function App() {
   const [isValidating, setIsValidating] = useState(false);
   const [validationSuccess, setValidationSuccess] = useState(false);
   const [qrScanner, setQrScanner] = useState<Html5Qrcode | null>(null);
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
 
   // Ticket tracking state
   const [storedTickets, setStoredTickets] = useState(0);
@@ -45,9 +46,11 @@ function App() {
   const [companyId, setCompanyId] = useState('');
 
   useEffect(() => {
+    console.log('Loading events...');
     setIsLoading(true);
     db.ref('/eventos').once('value').then(snapshot => {
       const eventos = snapshot.val();
+      console.log('Events loaded:', eventos);
       const eventsList = [];
       for (const id in eventos) {
         eventsList.push({ 
@@ -56,13 +59,18 @@ function App() {
           companyId: eventos[id].empresavinculada 
         });
       }
+      console.log('Processed events list:', eventsList);
       setEvents(eventsList);
       setIsLoading(false);
     });
   }, []);
 
   useEffect(() => {
+    console.log('Selected event changed:', selectedEvent);
+    console.log('Current events:', events);
+
     if (!selectedEvent) {
+      console.log('No event selected, resetting states');
       setStoredTickets(0);
       setValidatedTickets(0);
       setValidatedTypesCounts([]);
@@ -71,21 +79,31 @@ function App() {
     }
 
     const event = events.find(e => e.id === selectedEvent);
+    console.log('Found event:', event);
+
     if (event?.companyId) {
+      console.log('Setting company ID:', event.companyId);
       setCompanyId(event.companyId);
       
       // Listen for stored tickets
       const storedRef = db.ref(`empresas/${event.companyId}/vendas/vendasrealizadas/${selectedEvent}`);
+      console.log('Listening to stored tickets at:', storedRef.toString());
+
       storedRef.on('value', (snapshot) => {
         const tickets = snapshot.val();
+        console.log('Stored tickets data:', tickets);
         const count = tickets ? Object.keys(tickets).length : 0;
+        console.log('Stored tickets count:', count);
         setStoredTickets(count);
       });
 
       // Listen for validated tickets with type breakdown
       const validatedRef = db.ref(`/ingressos/${selectedEvent}/validados`);
+      console.log('Listening to validated tickets at:', validatedRef.toString());
+
       validatedRef.on('value', (snapshot) => {
         const validatedTypes = snapshot.val();
+        console.log('Validated tickets data:', validatedTypes);
         let totalValidated = 0;
         const typesCounts: ValidatedTypeCount[] = [];
 
@@ -97,32 +115,67 @@ function App() {
           });
         }
 
+        console.log('Total validated:', totalValidated);
+        console.log('Types breakdown:', typesCounts);
         setValidatedTickets(totalValidated);
         setValidatedTypesCounts(typesCounts);
       });
 
       return () => {
+        console.log('Cleaning up listeners');
         storedRef.off();
         validatedRef.off();
       };
     }
   }, [selectedEvent, events]);
 
-  const validateTicket = async () => {
-    if (!selectedEvent || !ticketCode) {
-      setValidationMessage('Selecione um evento e insira o código do ingresso.');
+  // Effect to handle QR code validation after scanning
+  useEffect(() => {
+    if (scannedCode) {
+      console.log('Scanned code changed, preparing validation:', scannedCode);
+      const validateScannedCode = async () => {
+        setTicketCode(scannedCode);
+        await validateTicket(scannedCode);
+        setScannedCode(null);
+      };
+      validateScannedCode();
+    }
+  }, [scannedCode]);
+
+  const validateTicket = async (codeToValidate?: string) => {
+    console.log('Starting ticket validation');
+    console.log('Selected event:', selectedEvent);
+    console.log('Ticket code to validate:', codeToValidate || ticketCode);
+
+    const finalCode = codeToValidate || ticketCode;
+
+    if (!selectedEvent) {
+      console.log('Validation failed: No event selected');
+      setValidationMessage('Por favor, selecione um evento antes de validar o ingresso.');
       return;
     }
 
+    if (!finalCode) {
+      console.log('Validation failed: No ticket code');
+      setValidationMessage('Por favor, insira o código do ingresso.');
+      return;
+    }
+
+    console.log('Validation prerequisites met, proceeding with validation');
     setIsValidating(true);
     try {
-      const snapshot = await db.ref(`/ingressos/${selectedEvent}/disponiveis/${ticketCode}`).once('value');
+      console.log(`Checking ticket at path: /ingressos/${selectedEvent}/disponiveis/${finalCode}`);
+      const snapshot = await db.ref(`/ingressos/${selectedEvent}/disponiveis/${finalCode}`).once('value');
       const ticket = snapshot.val();
-      console.log("Ingresso encontrado em /disponiveis/:", ticket);
+      console.log("Ticket data found:", ticket);
 
       if (ticket) {
+        console.log('Setting ticket info');
+        const eventName = events.find(e => e.id === selectedEvent)?.name;
+        console.log('Event name:', eventName);
+        
         setTicketInfo({
-          eventName: events.find(e => e.id === selectedEvent)?.name,
+          eventName: eventName,
           fullName: ticket.fullname || 'N/A',
           cpf: ticket.compradorcpf || 'N/A',
           type: ticket.tipo,
@@ -133,6 +186,7 @@ function App() {
         setValidationMessage('');
         setValidationSuccess(false);
       } else {
+        console.log('No ticket found');
         setValidationMessage('Ingresso não encontrado, confira os dados novamente com o cliente.');
       }
     } catch (error) {
@@ -144,33 +198,46 @@ function App() {
   };
 
   const handleFinalValidation = async () => {
-    if (!ticketInfo) return;
+    console.log('Starting final validation');
+    console.log('Ticket info:', ticketInfo);
+
+    if (!ticketInfo) {
+      console.log('No ticket info available');
+      return;
+    }
 
     const ticketType = ticketInfo.type || 'Desconhecido';
     const ticket = ticketInfo.rawTicket;
+    console.log('Ticket type:', ticketType);
+    console.log('Raw ticket data:', ticket);
 
     setIsValidating(true);
     try {
+      console.log('Updating ticket validation status');
       await db.ref(`/ingressos/${selectedEvent}/disponiveis/${ticketCode}`).update({
         isvalidaded: true
       });
 
       const validatedTypeRef = db.ref(`/ingressos/${selectedEvent}/validados/${ticketType}`);
+      console.log('Checking validated type ref:', validatedTypeRef.toString());
       const validatedSnapshot = await validatedTypeRef.once('value');
       
       if (!validatedSnapshot.exists()) {
+        console.log('Creating new validated type entry');
         await validatedTypeRef.set({});
       }
 
+      console.log('Saving validated ticket');
       await db.ref(`/ingressos/${selectedEvent}/validados/${ticketType}/${ticketCode}`).set({
         ...ticket,
         isvalidaded: true
       });
 
+      console.log('Updating UI state');
       setTicketInfo(prev => ({ ...prev, isValidated: true }));
       setValidationSuccess(true);
     } catch (error) {
-      console.error('Error validating ticket:', error);
+      console.error('Error in final validation:', error);
       setValidationMessage('Erro ao validar o ingresso. Tente novamente.');
     } finally {
       setIsValidating(false);
@@ -178,35 +245,68 @@ function App() {
   };
 
   const startQrScanner = () => {
+    console.log('Starting QR scanner');
+    console.log('Selected event:', selectedEvent);
+
+    if (!selectedEvent) {
+      console.log('Cannot start scanner: No event selected');
+      setValidationMessage('Por favor, selecione um evento antes de escanear o QR code.');
+      return;
+    }
+
     setShowQrReader(true);
     const scanner = new Html5Qrcode("qr-reader");
+    console.log('Scanner instance created');
     setQrScanner(scanner);
+
     scanner.start(
       { facingMode: "environment" },
       {
         fps: 10,
         qrbox: { width: 250, height: 250 }
       },
-      (decodedText) => {
-        setTicketCode(decodedText);
-        stopQrScanner();
+      async (decodedText) => {
+        console.log('QR code scanned:', decodedText);
+        try {
+          // First stop the scanner and hide the UI
+          if (scanner) {
+            await scanner.stop();
+            setShowQrReader(false);
+            setQrScanner(null);
+          }
+          
+          // Then set the validation message and proceed with code processing
+          setValidationMessage('QR Code escaneado com sucesso! Aguarde a validação...');
+          setScannedCode(decodedText);
+        } catch (error) {
+          console.error('Error processing QR code:', error);
+          setValidationMessage('Erro ao processar o QR code. Por favor, tente novamente.');
+        }
       },
       (error) => {
-        console.error(error);
+        console.error('QR scanner error:', error);
       }
     ).catch(err => {
       console.error("Error starting scanner:", err);
+      setValidationMessage('Erro ao iniciar o scanner. Por favor, tente novamente.');
     });
   };
 
-  const stopQrScanner = () => {
+  const stopQrScanner = async () => {
+    console.log('Attempting to stop QR scanner');
     if (qrScanner) {
-      qrScanner.stop().then(() => {
+      try {
+        await qrScanner.stop();
+        console.log('Scanner stopped successfully');
         setShowQrReader(false);
         setQrScanner(null);
-      }).catch(err => {
+      } catch (err) {
         console.error("Error stopping scanner:", err);
-      });
+        setValidationMessage('Erro ao parar o scanner. Por favor, recarregue a página.');
+        throw err;
+      }
+    } else {
+      console.log('No scanner instance to stop');
     }
   };
 
@@ -215,7 +315,7 @@ function App() {
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
-          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.0</span>
+          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">v1.3.2</span>
         </div>
       </header>
 
@@ -272,7 +372,10 @@ function App() {
                 <select 
                   className="w-full bg-white/5 border border-white/20 rounded-lg p-3 sm:p-4 pr-10 focus:ring-2 focus:ring-blue-500 transition appearance-none hover-glow"
                   value={selectedEvent}
-                  onChange={(e) => setSelectedEvent(e.target.value)}
+                  onChange={(e) => {
+                    console.log('Event selected:', e.target.value);
+                    setSelectedEvent(e.target.value);
+                  }}
                   disabled={isLoading}
                 >
                   <option value="">Selecione um evento</option>
@@ -292,7 +395,10 @@ function App() {
                   className="w-full bg-white/5 border border-white/20 rounded-lg p-3 sm:p-4 pl-12 focus:ring-2 focus:ring-blue-500 transition hover-glow"
                   placeholder="Digite o código do ingresso"
                   value={ticketCode}
-                  onChange={(e) => setTicketCode(e.target.value)}
+                  onChange={(e) => {
+                    console.log('Ticket code changed:', e.target.value);
+                    setTicketCode(e.target.value);
+                  }}
                 />
                 <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
               </div>
@@ -301,7 +407,7 @@ function App() {
             <div className="flex gap-4">
               <button
                 className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-lg p-3 sm:p-4 font-medium flex items-center justify-center gap-2 transition hover-glow disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                onClick={validateTicket}
+                onClick={() => validateTicket()}
                 disabled={isValidating}
               >
                 {isValidating ? (
@@ -322,8 +428,12 @@ function App() {
             </div>
 
             {validationMessage && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 animate-shake">
-                <p className="text-red-300 text-sm sm:text-base">{validationMessage}</p>
+              <div className={`border rounded-lg p-4 animate-shake ${
+                validationMessage.includes('sucesso') 
+                  ? 'bg-green-500/20 border-green-500/50 text-green-300'
+                  : 'bg-red-500/20 border-red-500/50 text-red-300'
+              }`}>
+                <p className="text-sm sm:text-base">{validationMessage}</p>
               </div>
             )}
 
