@@ -164,6 +164,7 @@ function App() {
     console.log('Validation prerequisites met, proceeding with validation');
     setIsValidating(true);
     try {
+<<<<<<< HEAD
       console.log(`Checking ticket at path: /ingressos/${selectedEvent}/disponiveis/${finalCode}`);
       const snapshot = await db.ref(`/ingressos/${selectedEvent}/disponiveis/${finalCode}`).once('value');
       const ticket = snapshot.val();
@@ -174,6 +175,49 @@ function App() {
         const eventName = events.find(e => e.id === selectedEvent)?.name;
         console.log('Event name:', eventName);
         
+=======
+      // First, try to find the ticket in the disponiveis path
+      const snapshot = await db.ref(`/ingressos/${selectedEvent}/disponiveis/${ticketCode}`).once('value');
+      let ticket = snapshot.val();
+      console.log("1. Ticket inicial encontrado:", ticket);
+
+      // If ticket exists but has no type, or if ticket doesn't exist, try to find it using CPF
+      if (!ticket?.tipo || !ticket) {
+        console.log("2. Tipo não encontrado no ticket inicial, buscando por CPF");
+        // Get the CPF from the ticket data if it exists
+        const cpf = ticket?.compradorcpf;
+        console.log("3. CPF encontrado:", cpf);
+        
+        if (cpf) {
+          // Try to find the ticket type in the user's ingressoscomprados
+          console.log("4. Buscando em /users/cpf/${cpf}/ingressoscomprados/${ticketCode}");
+          const userTicketSnapshot = await db.ref(`/users/cpf/${cpf}/ingressoscomprados/${ticketCode}`).once('value');
+          const userTicket = userTicketSnapshot.val();
+          console.log("5. Dados do ingresso encontrados no usuário:", userTicket);
+          
+          if (userTicket?.tipo) {
+            console.log("6. Tipo encontrado no userTicket:", userTicket.tipo);
+            // Update the ticket object with the type from user path
+            ticket = {
+              ...ticket,
+              tipo: userTicket.tipo
+            };
+            console.log("7. Ticket atualizado com o tipo:", ticket);
+          }
+        }
+      }
+
+      if (ticket) {
+        console.log("8. Ticket final a ser mostrado:", {
+          eventName: events.find(e => e.id === selectedEvent)?.name,
+          fullName: ticket.fullname || 'N/A',
+          cpf: ticket.compradorcpf || 'N/A',
+          type: ticket.tipo,
+          isValidated: ticket.isvalidaded,
+          rawTicket: ticket
+        });
+
+>>>>>>> befe9b4138607ae392b9de4688620c24f457d0f4
         setTicketInfo({
           eventName: eventName,
           fullName: ticket.fullname || 'N/A',
@@ -186,11 +230,15 @@ function App() {
         setValidationMessage('');
         setValidationSuccess(false);
       } else {
+<<<<<<< HEAD
         console.log('No ticket found');
+=======
+        console.log("9. Nenhum ticket encontrado");
+>>>>>>> befe9b4138607ae392b9de4688620c24f457d0f4
         setValidationMessage('Ingresso não encontrado, confira os dados novamente com o cliente.');
       }
     } catch (error) {
-      console.error('Error validating ticket:', error);
+      console.error('10. Erro ao validar ingresso:', error);
       setValidationMessage('Erro ao validar o ingresso. Tente novamente.');
     } finally {
       setIsValidating(false);
