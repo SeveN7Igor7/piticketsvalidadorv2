@@ -53,17 +53,20 @@ function App() {
       console.log('Events loaded:', eventos);
       const eventsList = [];
       for (const id in eventos) {
-        eventsList.push({ 
-          id, 
-          name: eventos[id].nomeevento,
-          companyId: eventos[id].empresavinculada 
-        });
+        if (eventos[id].validadorvisible !== false) { // <-- Aqui está o filtro
+          eventsList.push({ 
+            id, 
+            name: eventos[id].nomeevento,
+            companyId: eventos[id].empresavinculada 
+          });
+        }
       }
       console.log('Processed events list:', eventsList);
       setEvents(eventsList);
       setIsLoading(false);
     });
   }, []);
+  
 
   useEffect(() => {
     console.log('Selected event changed:', selectedEvent);
@@ -335,7 +338,7 @@ function App() {
       <header className="bg-black/50 backdrop-blur-sm p-6 shadow-lg animate-slide-down">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Piauí Tickets</span>
-          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Debug v1.3.4</span>
+          <span className="text-sm bg-white/10 px-3 py-1 rounded-full">Debug v1.4.5</span>
         </div>
       </header>
 
